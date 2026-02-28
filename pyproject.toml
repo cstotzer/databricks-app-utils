@@ -1,0 +1,113 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "databricks-app-utils"
+version = "0.2.0"
+description = "Utilities for building Streamlit apps on Databricks: settings, authentication, SQL client, and query registry."
+readme = "README.md"
+license = {text = "GPL-3.0"}
+license-files = ["LICEN[CS]E*"]
+authors = [
+  { name = "Christoph Stotzer", email = "christoph.stotzer@gmail.com" },
+]
+keywords = ["databricks", "streamlit", "sql", "utilities"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Database",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "streamlit",
+  "pydantic>=2.6",
+  "pydantic-settings>=2.2",
+  "databricks-sql-connector>=3.0.0",
+  "pyarrow>=12.0.0",
+]
+
+[project.optional-dependencies]
+polars = ["polars>=0.20"]
+
+[project.urls]
+Homepage = "https://github.com/cstotzer/databricks-app-utils"
+Repository = "https://github.com/cstotzer/databricks-app-utils"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = ["-ra", "-q"]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "watchdog (>=6.0.0,<7.0.0)",
+    "ruff (>=0.14.0,<0.15.0)",
+    "pytest (>=9.0.2,<10.0.0)",
+    "pandas-stubs (>=3.0.0.260204,<4.0.0.0)"
+]
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+select = [
+    "ALL",
+]
+extend-select = [
+    "D",  # docstyle
+    "I",  # isort
+]
+preview = true
+ignore = [
+    "COM812",  # missing-trailing-comma
+    "CPY001",  # Missing copyright notice at top of file
+    "D100",    # Missing docstring in public module
+    "D104",    # Missing docstring in public package
+    "D203",    # blank line required before class docstring
+    "D211",    # no-blank-line-before-class
+    "D213",    # multi-line-summary-second-line
+    "EM101",   # raw-string-in-exception
+    "FIX002",  # line-contains-todo
+    "ISC001",  # Conflicts with formatter ruff
+    "PLR0904", # Too many public methods (... > 20)
+    "TD002",   # Missing author in TODO `# TODO(<author_name>): ...`
+    "TD003",   # missing-todo-link
+    "TRY003",  # raise-vanilla-args
+]
+fixable = ["ALL"]
+unfixable = [
+    "D", # Dont fix docstyle from others
+    "I", # we run isort separately
+]
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"auth.py" = [
+    "PLC0415", # intentional lazy import for optional SDK dependency
+]
+"databricks_client.py" = [
+    "PLC0415", # intentional lazy imports for optional dependencies (polars, pandas)
+    "C901",    # _arrow_type_to_spark complexity is inherent to the type mapping
+    "PLR0911", # _arrow_type_to_spark return count is inherent to the type mapping
+    "S608",    # SQL-injection is not a concern in this context, as the method is not exposed to user input and is only used for internal type mapping.
+]
+"tests/**" = [
+    "S101",    # asserts allowed in tests...
+    "ARG",     # Unused function args -> fixtures nevertheless are functionally relevant...
+    "FBT",     # Don't care about booleans as positional arguments in tests, e.g. via @pytest.mark.parametrize()
+    "PLR2004", # Magic value used in comparison, ...
+    "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "D",       # Don't care about docstrings in tests
+    "DOC",     # Don't care about docstrings in tests
+    "PLR6301", # Don't care about unused self parameter in methods definitions.
+    "ANN201",  # Don't require return type annotations in tests
+]
