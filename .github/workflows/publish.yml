@@ -9,7 +9,7 @@
 # 4. Build the package
 # 5. Publish to PyPI
 
-name: Release
+name: Publish
 
 on:
   workflow_dispatch:
