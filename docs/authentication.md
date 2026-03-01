@@ -1,6 +1,6 @@
 # Authentication — Technical Overview
 
-This document describes the three authentication methods supported by the core module (`src/app/core/`), how each is configured, and the detailed inner workings of the U2M implementation.
+This document describes the three authentication methods supported by `databricks-app-utils` (`src/databricks_app_utils/`), how each is configured, and the detailed inner workings of the U2M implementation.
 
 ---
 
@@ -31,8 +31,8 @@ AppSettings  ──►  build_auth()  ──►  DatabricksAuth
 
 ## Method 1 — PAT (Personal Access Token)
 
-**Environment variable:** `APP_DATABRICKS_AUTH_METHOD=pat`  
-**Required:** `APP_DATABRICKS_PAT=<token>`
+**Environment variable:** `DATABRICKS_AUTH_METHOD=pat`  
+**Required:** `DATABRICKS_PAT=<token>`
 
 ### How it works
 
@@ -56,7 +56,7 @@ _build_conn_kwargs()
 
 ## Method 2 — OBO (On-Behalf-Of / Databricks Apps)
 
-**Environment variable:** `APP_DATABRICKS_AUTH_METHOD=obo`  
+**Environment variable:** `DATABRICKS_AUTH_METHOD=obo`  
 **Required:** deployed on Databricks Apps with OBO forwarding enabled.
 
 ### How it works
@@ -89,7 +89,7 @@ The `token_provider` is a callable rather than a pre-read value because the head
 
 ## Method 3 — U2M (User-to-Machine OAuth)
 
-**Environment variable:** `APP_DATABRICKS_AUTH_METHOD=u2m`
+**Environment variable:** `DATABRICKS_AUTH_METHOD=u2m`
 
 This is the recommended method for **local development**. It opens a browser-based OAuth login on the first query, then reuses the token for all subsequent queries within the same server process (no re-prompt on page refresh).
 
@@ -188,7 +188,7 @@ The connector-native approach avoids this entirely: no SDK `Config` is created a
 
 | Variable | Default | Description |
 |---|---|---|
-| `APP_DATABRICKS_SERVER_HOSTNAME` | — | `adb-xxx.azuredatabricks.net` (no `https://`) |
-| `APP_DATABRICKS_HTTP_PATH` | — | `/sql/1.0/warehouses/…` |
-| `APP_DATABRICKS_AUTH_METHOD` | `obo` | `pat` \| `u2m` \| `obo` |
-| `APP_DATABRICKS_PAT` | `None` | Required when `auth_method=pat` |
+| `DATABRICKS_SERVER_HOSTNAME` | — | `adb-xxx.azuredatabricks.net` (no `https://`) |
+| `DATABRICKS_HTTP_PATH` | — | `/sql/1.0/warehouses/…` |
+| `DATABRICKS_AUTH_METHOD` | `obo` | `pat` \| `u2m` \| `obo` |
+| `DATABRICKS_PAT` | `None` | Required when `auth_method=pat` |

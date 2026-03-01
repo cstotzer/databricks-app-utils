@@ -1,0 +1,30 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Verify version matches release tag
+        run: |
+          VERSION=$(uv version --short)
+          echo "Package version: $VERSION"
+          echo "Release tag: ${{ github.ref_name }}"
+          [ "v$VERSION" = "${{ github.ref_name }}" ] || (echo "Version mismatch" && exit 1)
+
+      - name: Build
+        run: uv build
+
+      - name: Publish
+        run: uv publish

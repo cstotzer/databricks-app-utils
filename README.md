@@ -1,8 +1,8 @@
-# Core Module
+# databricks-app-utils
 
-The `app.core` package is the foundation of the application. It handles everything that sits below the business logic: reading configuration, authenticating with Databricks, executing SQL, and loading query files. Application code should depend on these abstractions rather than touching the Databricks connector directly.
+A lightweight Python library for building Streamlit apps on Databricks. It handles everything that sits below the business logic: reading configuration, authenticating with Databricks, executing SQL, and loading query files. Application code should depend on these abstractions rather than touching the Databricks connector directly.
 
-**License:** MIT
+**License:** GPL-3.0
 
 ---
 
@@ -19,46 +19,46 @@ The `app.core` package is the foundation of the application. It handles everythi
 
 ## Settings management
 
-`AppSettings` is a [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) model. It reads every value from environment variables (prefix `APP_`) and optionally from a `.env` file in the working directory. Unknown variables are silently ignored.
+`AppSettings` is a [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) model. It reads every value from environment variables and optionally from a `.env` file in the working directory. Unknown variables are silently ignored.
 
 ### Environment variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `APP_DATABRICKS_SERVER_HOSTNAME` | ✅ | — | `adb-xxx.azuredatabricks.net` (no `https://`) |
-| `APP_DATABRICKS_HTTP_PATH` | ✅ | — | `/sql/1.0/warehouses/…` |
-| `APP_DATABRICKS_AUTH_METHOD` | | `obo` | `pat` \| `u2m` \| `obo` |
-| `APP_DATABRICKS_PAT` | ✅ if `auth_method=pat` | — | Personal access token |
-| `APP_DATABRICKS_DEFAULT_CATALOG` | | `None` | Applied as `USE CATALOG` before each query |
-| `APP_DATABRICKS_DEFAULT_SCHEMA` | | `None` | Applied as `USE SCHEMA` before each query |
-| `APP_DATABRICKS_CONNECT_TIMEOUT_S` | | `30` | Connection timeout in seconds |
-| `APP_DATABRICKS_RETRY_ATTEMPTS` | | `1` | Extra attempts on transient failures |
-| `APP_DATABRICKS_RETRY_BACKOFF_S` | | `0.5` | Initial backoff between retries (doubles each attempt) |
-| `APP_QUERY_TAG` | | `streamlit-app` | Prepended as a SQL comment: `/* streamlit-app */` |
+| `DATABRICKS_SERVER_HOSTNAME` | ✅ | — | `adb-xxx.azuredatabricks.net` (no `https://`) |
+| `DATABRICKS_HTTP_PATH` | ✅ | — | `/sql/1.0/warehouses/…` |
+| `DATABRICKS_AUTH_METHOD` | | `obo` | `pat` \| `u2m` \| `obo` |
+| `DATABRICKS_PAT` | ✅ if `auth_method=pat` | — | Personal access token |
+| `DATABRICKS_DEFAULT_CATALOG` | | `None` | Applied as `USE CATALOG` before each query |
+| `DATABRICKS_DEFAULT_SCHEMA` | | `None` | Applied as `USE SCHEMA` before each query |
+| `DATABRICKS_CONNECT_TIMEOUT_S` | | `30` | Connection timeout in seconds |
+| `DATABRICKS_RETRY_ATTEMPTS` | | `1` | Extra attempts on transient failures |
+| `DATABRICKS_RETRY_BACKOFF_S` | | `0.5` | Initial backoff between retries (doubles each attempt) |
+| `QUERY_TAG` | | `streamlit-app` | Prepended as a SQL comment: `/* streamlit-app */` |
 
 ### `.env` file (recommended for local development)
 
 Create a `.env` file in the project root (never commit it):
 
 ```dotenv
-APP_DATABRICKS_SERVER_HOSTNAME=adb-1234567890123456.7.azuredatabricks.net
-APP_DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/abcdef1234567890
-APP_DATABRICKS_AUTH_METHOD=u2m
-APP_DATABRICKS_DEFAULT_CATALOG=my_catalog
-APP_DATABRICKS_DEFAULT_SCHEMA=my_schema
+DATABRICKS_SERVER_HOSTNAME=adb-1234567890123456.7.azuredatabricks.net
+DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/abcdef1234567890
+DATABRICKS_AUTH_METHOD=u2m
+DATABRICKS_DEFAULT_CATALOG=my_catalog
+DATABRICKS_DEFAULT_SCHEMA=my_schema
 ```
 
 For PAT authentication, add:
 
 ```dotenv
-APP_DATABRICKS_AUTH_METHOD=pat
-APP_DATABRICKS_PAT=dapi0123456789abcdef
+DATABRICKS_AUTH_METHOD=pat
+DATABRICKS_PAT=dapi0123456789abcdef
 ```
 
 ### Usage
 
 ```python
-from app.core.settings import AppSettings
+from databricks_app_utils.settings import AppSettings
 
 settings = AppSettings()
 print(settings.databricks_server_hostname)
@@ -79,7 +79,7 @@ def get_settings() -> AppSettings:
 
 See [`docs/authentication.md`](authentication.md) for a full technical deep-dive. The summary is:
 
-| Method | `APP_DATABRICKS_AUTH_METHOD` | Best for |
+| Method | `DATABRICKS_AUTH_METHOD` | Best for |
 |---|---|---|
 | **PAT** | `pat` | CI/CD, service accounts |
 | **U2M** | `u2m` | Local development — browser OAuth, zero secrets |
@@ -90,8 +90,8 @@ See [`docs/authentication.md`](authentication.md) for a full technical deep-dive
 `build_auth()` converts settings into a `DatabricksAuth` value object. You rarely need to call it directly — `DatabricksClient` takes one as a constructor argument.
 
 ```python
-from app.core.settings import AppSettings
-from app.core.auth import build_auth
+from databricks_app_utils.settings import AppSettings
+from databricks_app_utils.auth import build_auth
 
 settings = AppSettings()
 auth = build_auth(settings)
@@ -100,8 +100,8 @@ auth = build_auth(settings)
 #### PAT
 
 ```dotenv
-APP_DATABRICKS_AUTH_METHOD=pat
-APP_DATABRICKS_PAT=dapi0123456789abcdef
+DATABRICKS_AUTH_METHOD=pat
+DATABRICKS_PAT=dapi0123456789abcdef
 ```
 
 ```python
@@ -113,7 +113,7 @@ auth = build_auth(settings)
 #### U2M (browser OAuth — recommended for local dev)
 
 ```dotenv
-APP_DATABRICKS_AUTH_METHOD=u2m
+DATABRICKS_AUTH_METHOD=u2m
 ```
 
 No secrets needed. On the first query, a browser window opens for the user to log in. Subsequent queries within the same server process reuse the cached token silently.
@@ -127,7 +127,7 @@ auth = build_auth(settings)
 #### OBO (Databricks Apps)
 
 ```dotenv
-APP_DATABRICKS_AUTH_METHOD=obo
+DATABRICKS_AUTH_METHOD=obo
 ```
 
 The token is read from the `X-Forwarded-Access-Token` request header on every query. The token provider must be injected at runtime from the Streamlit layer:
@@ -169,7 +169,7 @@ db.query_polars(
 ### Polars query
 
 ```python
-from app.core.databricks_client import DatabricksClient
+from databricks_app_utils.databricks_client import DatabricksClient
 
 df = db.query_polars("SELECT id, name FROM customers LIMIT :n", params={"n": 100})
 # Returns a polars.DataFrame
@@ -221,8 +221,8 @@ db.merge_dataframe(
 `DatabricksClient` retries failed queries with exponential backoff. Configure via settings:
 
 ```dotenv
-APP_DATABRICKS_RETRY_ATTEMPTS=2      # 2 extra attempts (3 total)
-APP_DATABRICKS_RETRY_BACKOFF_S=1.0   # 1 s, then 2 s
+DATABRICKS_RETRY_ATTEMPTS=2      # 2 extra attempts (3 total)
+DATABRICKS_RETRY_BACKOFF_S=1.0   # 1 s, then 2 s
 ```
 
 ### Wiring it up in Streamlit
@@ -243,10 +243,10 @@ def get_db() -> DatabricksClient:
 
 ### File layout
 
-SQL files live under `app/queries/` and are organised into sub-packages:
+SQL files live under a queries sub-package inside your app and are organised into sub-packages:
 
 ```
-src/app/queries/
+src/<your_app>/queries/
 ├── __init__.py
 └── customers/
     ├── list_customers.sql
@@ -257,9 +257,9 @@ src/app/queries/
 ### Loading a query
 
 ```python
-from app.core.query_registry import QueryRegistry
+from databricks_app_utils.query_registry import QueryRegistry
 
-registry = QueryRegistry(package="app.queries")
+registry = QueryRegistry(package="your_app.queries")
 q = registry.get("customers/list_customers")
 
 print(q.name)   # "customers/list_customers"
@@ -280,7 +280,7 @@ df = db.query_polars(q.sql, params={"states": ["CA", "NY"], "limit": 200})
 ```python
 @st.cache_resource
 def get_queries() -> QueryRegistry:
-    return QueryRegistry(package="app.queries")
+    return QueryRegistry(package="your_app.queries")
 ```
 
 ### Why GPL-3.0?
