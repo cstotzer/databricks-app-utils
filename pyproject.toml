@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "databricks-app-utils"
-version = "0.2.1"
+version = "0.2.2"
 description = "Utilities for building apps on Databricks: settings, authentication, SQL client, and query registry."
 readme = "README.md"
 license = {text = "GPL-3.0"}
