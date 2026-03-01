@@ -32,7 +32,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-polars = ["polars>=0.20"]
+polars = ["polars>=1.38.1,<2.0.0"]
+sdk = ["databricks-sdk>=0.94.0,<0.95.0"]
 
 [project.urls]
 Homepage = "https://github.com/cstotzer/databricks-app-utils"
@@ -48,7 +49,10 @@ dev = [
     "watchdog (>=6.0.0,<7.0.0)",
     "ruff (>=0.14.0,<0.15.0)",
     "pytest (>=9.0.2,<10.0.0)",
-    "pandas-stubs (>=3.0.0.260204,<4.0.0.0)"
+    "pandas-stubs (>=3.0.0.260204,<4.0.0.0)",
+    "streamlit",
+    "polars (>=1.38.1,<2.0.0)",
+    "databricks-sdk (>=0.94.0,<0.95.0)",
 ]
 
 [tool.ruff]
@@ -93,6 +97,9 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "auth.py" = [
     "PLC0415", # intentional lazy import for optional SDK dependency
+]
+"workspace_client.py" = [
+    "PLC0415", # intentional lazy import for optional databricks-sdk dependency
 ]
 "databricks_client.py" = [
     "PLC0415", # intentional lazy imports for optional dependencies (polars, pandas)
