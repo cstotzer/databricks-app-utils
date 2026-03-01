@@ -16,7 +16,7 @@ CredentialsProvider = Callable[
 
 @dataclass(frozen=True)
 class DatabricksAuth:
-    """Normalized authentication payload used by DatabricksClient."""
+    """Normalized authentication payload used by SQLClient."""
 
     method: AuthMethod
     access_token: str | None = None
@@ -38,14 +38,13 @@ def build_auth(settings: AppSettings) -> DatabricksAuth:
 
     Raises:
         ValueError: If PAT auth method is selected but
-            APP_DATABRICKS_PAT is not set.
+            DATABRICKS_PAT is not set.
         NotImplementedError: If an unsupported auth method is provided.
     """
     if settings.databricks_auth_method == AuthMethod.PAT:
         if settings.databricks_pat is None:
             raise ValueError(
-                "APP_DATABRICKS_PAT must be set when"
-                " APP_DATABRICKS_AUTH_METHOD=pat"
+                "DATABRICKS_PAT must be set when DATABRICKS_AUTH_METHOD=pat"
             )
         return DatabricksAuth(
             method=AuthMethod.PAT,
@@ -59,6 +58,32 @@ def build_auth(settings: AppSettings) -> DatabricksAuth:
         return DatabricksAuth(
             method=AuthMethod.U2M,
             oauth_persistence=OAuthPersistenceCache(),
+        )
+
+    if settings.databricks_auth_method == AuthMethod.U2M_PERSISTENT:
+        # Use the Databricks SDK's OAuth flow backed by a disk-based TokenCache
+        # (~/.config/databricks-sdk-py/oauth/<hash>.json). The token survives
+        # process restarts and is shared with WorkspaceClient (same cache file).
+        # The browser only opens once; subsequent starts load the cached token
+        # and refresh it silently via the stored refresh token (valid 30 days).
+        try:
+            from databricks.sdk.config import Config  # noqa: PLC0415
+        except ImportError as e:
+            raise ImportError(
+                "databricks-sdk is required for U2M_PERSISTENT auth; "
+                "run: pip install 'databricks-app-utils[sdk]'"
+            ) from e
+
+        cfg = Config(
+            host=f"https://{settings.databricks_server_hostname}",
+            auth_type="external-browser",
+        )
+        # cfg.authenticate() returns fresh headers on every call, backed by
+        # the SDK's Refreshable token source. Wrap it as a SQL connector
+        # CredentialsProvider: a callable that returns a HeaderFactory.
+        return DatabricksAuth(
+            method=AuthMethod.U2M_PERSISTENT,
+            credentials_provider=lambda: cfg.authenticate,
         )
 
     if settings.databricks_auth_method == AuthMethod.OBO:

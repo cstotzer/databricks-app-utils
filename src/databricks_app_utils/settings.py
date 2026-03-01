@@ -12,13 +12,18 @@ class AuthMethod(StrEnum):
     PAT : str
         Personal Access Token authentication.
     U2M : str
-        Databricks OAuth user-to-machine authentication.
+        Databricks OAuth user-to-machine authentication (in-memory token cache).
+    U2M_PERSISTENT : str
+        Databricks OAuth user-to-machine via the Databricks SDK, with disk-based
+        token persistence. Tokens survive process restarts and are shared between
+        SQLClient and WorkspaceClient. Requires ``databricks-sdk``.
     OBO : str
         Databricks Apps on-behalf-of-user authentication.
     """
 
     PAT = "pat"
-    U2M = "u2m"  # Databricks OAuth user-to-machine
+    U2M = "u2m"  # Databricks OAuth user-to-machine (in-memory)
+    U2M_PERSISTENT = "u2m_persistent"  # SDK-backed, disk-persisted token cache
     OBO = "obo"  # Databricks Apps on-behalf-of-user
 
 
@@ -50,7 +55,10 @@ class AppSettings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_prefix="", env_file=".env", extra="ignore"
+        env_prefix="",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     # Databricks SQL Warehouse

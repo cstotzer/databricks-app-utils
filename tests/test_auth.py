@@ -29,24 +29,30 @@ def test_build_auth_pat_missing_token():
     settings = _settings(
         databricks_auth_method=AuthMethod.PAT, databricks_pat=None
     )
-    with pytest.raises(ValueError, match="APP_DATABRICKS_PAT"):
+    with pytest.raises(ValueError, match="DATABRICKS_PAT"):
         build_auth(settings)
 
 
 def test_build_auth_u2m():
-    from unittest.mock import MagicMock, patch
-
-    mock_config = MagicMock()
-    mock_config.authenticate.return_value = lambda: {
-        "Authorization": "Bearer test-token"
-    }
-    with patch("databricks_app_utils.auth.Config", return_value=mock_config):
-        settings = _settings(databricks_auth_method=AuthMethod.U2M)
-        auth = build_auth(settings)
+    settings = _settings(databricks_auth_method=AuthMethod.U2M)
+    auth = build_auth(settings)
     assert auth.method == AuthMethod.U2M
-    assert auth.credentials_provider is not None
+    assert auth.oauth_persistence is not None
     assert auth.access_token is None
     assert auth.token_provider is None
+
+
+def test_build_auth_u2m_persistent():
+    from unittest.mock import MagicMock, patch
+
+    mock_cfg = MagicMock()
+    mock_cfg.authenticate.return_value = lambda: {"Authorization": "Bearer sdk-tok"}
+    with patch("databricks.sdk.config.Config", return_value=mock_cfg):
+        settings = _settings(databricks_auth_method=AuthMethod.U2M_PERSISTENT)
+        auth = build_auth(settings)
+    assert auth.method == AuthMethod.U2M_PERSISTENT
+    assert auth.credentials_provider is not None
+    assert auth.access_token is None
 
 
 def test_build_auth_obo():

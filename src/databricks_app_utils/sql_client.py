@@ -122,7 +122,7 @@ def compile_named(
     return compiled, values
 
 
-class DatabricksClient:
+class SQLClient:
     """Single injected client.
 
     Supports:
@@ -360,6 +360,10 @@ class DatabricksClient:
                 conn_kwargs["experimental_oauth_persistence"] = (
                     self._a.oauth_persistence
                 )
+        elif self._a.method == AuthMethod.U2M_PERSISTENT:
+            # SDK-backed credentials provider; cfg.authenticate returns fresh
+            # headers on every call via the SDK's Refreshable token source.
+            conn_kwargs["credentials_provider"] = self._a.credentials_provider
         elif self._a.method == AuthMethod.OBO:
             if not self._a.token_provider:
                 raise ValueError(

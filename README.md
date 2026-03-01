@@ -12,7 +12,8 @@ A lightweight Python library for building Streamlit apps on Databricks. It handl
 |---|---|---|
 | `settings.py` | `AppSettings` | Reads all configuration from environment variables / `.env` |
 | `auth.py` | `DatabricksAuth`, `build_auth()` | Translates settings into an auth value object |
-| `databricks_client.py` | `DatabricksClient` | Executes SQL queries against a Databricks SQL Warehouse |
+| `sql_client.py` | `SQLClient` | Executes SQL queries against a Databricks SQL Warehouse |
+| `workspace_client.py` | `build_workspace_client()` | Builds a `databricks.sdk.WorkspaceClient` with shared auth. Requires `[sdk]`. |
 | `query_registry.py` | `QueryRegistry`, `SqlQuery` | Loads and caches `.sql` files from a Python package |
 
 ---
@@ -27,7 +28,7 @@ A lightweight Python library for building Streamlit apps on Databricks. It handl
 |---|---|---|---|
 | `DATABRICKS_SERVER_HOSTNAME` | ✅ | — | `adb-xxx.azuredatabricks.net` (no `https://`) |
 | `DATABRICKS_HTTP_PATH` | ✅ | — | `/sql/1.0/warehouses/…` |
-| `DATABRICKS_AUTH_METHOD` | | `obo` | `pat` \| `u2m` \| `obo` |
+| `DATABRICKS_AUTH_METHOD` | | `obo` | `pat` \| `u2m` \| `u2m_persistent` \| `obo` |
 | `DATABRICKS_PAT` | ✅ if `auth_method=pat` | — | Personal access token |
 | `DATABRICKS_DEFAULT_CATALOG` | | `None` | Applied as `USE CATALOG` before each query |
 | `DATABRICKS_DEFAULT_SCHEMA` | | `None` | Applied as `USE SCHEMA` before each query |
@@ -82,12 +83,13 @@ See [`docs/authentication.md`](authentication.md) for a full technical deep-dive
 | Method | `DATABRICKS_AUTH_METHOD` | Best for |
 |---|---|---|
 | **PAT** | `pat` | CI/CD, service accounts |
-| **U2M** | `u2m` | Local development — browser OAuth, zero secrets |
+| **U2M** | `u2m` | Local development — browser OAuth, in-memory token cache, when only `SQLClient` is used |
+| **U2M Persistent** | `u2m_persistent` | Local development — browser OAuth, disk token cache, shared between `SQLClient` and `WorkspaceClient`. Requires `[sdk]`. |
 | **OBO** | `obo` | Deployed Databricks Apps |
 
 ### Usage
 
-`build_auth()` converts settings into a `DatabricksAuth` value object. You rarely need to call it directly — `DatabricksClient` takes one as a constructor argument.
+`build_auth()` converts settings into a `DatabricksAuth` value object. You rarely need to call it directly — `SQLClient` takes one as a constructor argument.
 
 ```python
 from databricks_app_utils.settings import AppSettings
@@ -110,18 +112,38 @@ auth = build_auth(settings)
 # auth.access_token == "dapi…"
 ```
 
-#### U2M (browser OAuth — recommended for local dev)
+#### U2M (browser OAuth — in-memory)
 
 ```dotenv
 DATABRICKS_AUTH_METHOD=u2m
 ```
 
-No secrets needed. On the first query, a browser window opens for the user to log in. Subsequent queries within the same server process reuse the cached token silently.
+No secrets needed. On the first query, a browser window opens for the user to log in. Subsequent queries within the same server process reuse the cached token silently. Token is **lost on restart**.
 
 ```python
 auth = build_auth(settings)
-# auth.method         == AuthMethod.U2M
+# auth.method            == AuthMethod.U2M
 # auth.oauth_persistence  ← in-memory OAuthPersistenceCache, held for process lifetime
+```
+
+#### U2M Persistent (browser OAuth — disk cache, shared with WorkspaceClient)
+
+```dotenv
+DATABRICKS_AUTH_METHOD=u2m_persistent
+```
+
+Like `u2m` but backed by the Databricks SDK's disk-based `TokenCache` (`~/.config/databricks-sdk-py/oauth/`). The browser only opens on first use; subsequent starts — even after a restart — load the cached token and refresh it silently. The same cache file is shared with `WorkspaceClient`, so the browser flow fires at most once across both clients.
+
+Requires `databricks-sdk`: `pip install 'databricks-app-utils[sdk]'`
+
+```python
+auth = build_auth(settings)  # checks disk cache; opens browser only if needed
+# auth.method               == AuthMethod.U2M_PERSISTENT
+# auth.credentials_provider  ← wraps sdk Config.authenticate (auto-refreshing)
+
+ws = build_workspace_client(settings=settings, auth=auth)
+db = SQLClient(settings=settings, auth=auth)
+# Both hit the same TokenCache file on disk
 ```
 
 #### OBO (Databricks Apps)
@@ -143,7 +165,7 @@ auth = DatabricksAuth(
 
 ## Database interface
 
-`DatabricksClient` is the single interface for all SQL execution. It opens a short-lived connection per query (robust against warehouse idle timeouts) and applies `USE CATALOG` / `USE SCHEMA` automatically when defaults are configured.
+`SQLClient` is the single interface for all SQL execution. It opens a short-lived connection per query (robust against warehouse idle timeouts) and applies `USE CATALOG` / `USE SCHEMA` automatically when defaults are configured.
 
 ### Query methods
 
@@ -169,7 +191,7 @@ db.query_polars(
 ### Polars query
 
 ```python
-from databricks_app_utils.databricks_client import DatabricksClient
+from databricks_app_utils.sql_client import SQLClient
 
 df = db.query_polars("SELECT id, name FROM customers LIMIT :n", params={"n": 100})
 # Returns a polars.DataFrame
@@ -218,7 +240,7 @@ db.merge_dataframe(
 
 ### Retry behaviour
 
-`DatabricksClient` retries failed queries with exponential backoff. Configure via settings:
+`SQLClient` retries failed queries with exponential backoff. Configure via settings:
 
 ```dotenv
 DATABRICKS_RETRY_ATTEMPTS=2      # 2 extra attempts (3 total)
@@ -229,10 +251,65 @@ DATABRICKS_RETRY_BACKOFF_S=1.0   # 1 s, then 2 s
 
 ```python
 @st.cache_resource
-def get_db() -> DatabricksClient:
+def get_db() -> SQLClient:
     settings = get_settings()
     auth = build_auth(settings)
-    return DatabricksClient(settings=settings, auth=auth)
+    return SQLClient(settings=settings, auth=auth)
+```
+
+---
+
+## Workspace client
+
+`build_workspace_client()` returns a fully configured `databricks.sdk.WorkspaceClient` using the same `DatabricksAuth` object as `SQLClient`. Requires `pip install 'databricks-app-utils[sdk]'`.
+
+Because it returns the SDK's own `WorkspaceClient` directly, the full SDK surface — jobs, clusters, secrets, Unity Catalog, and everything else — is available with complete type information.
+
+### Usage
+
+```python
+from databricks_app_utils.auth import build_auth
+from databricks_app_utils.workspace_client import build_workspace_client
+
+settings = AppSettings()
+auth = build_auth(settings)
+ws = build_workspace_client(settings, auth)
+
+for job in ws.jobs.list():
+    print(job.settings.name)
+
+ws.secrets.put_secret(scope="my-scope", key="api-key", string_value="…")
+ws.clusters.get(cluster_id="1234-567890-abc123")
+```
+
+All four auth methods are supported. For `u2m_persistent`, `SQLClient` and `WorkspaceClient` share the same disk-based token cache so the browser opens at most once across both:
+
+```python
+auth = build_auth(settings)   # DATABRICKS_AUTH_METHOD=u2m_persistent
+db = SQLClient(settings=settings, auth=auth)
+ws = build_workspace_client(settings, auth)
+# Both resolve to the same TokenCache file — browser fires once
+```
+
+For OBO, inject the `token_provider` before building either client:
+
+```python
+auth = DatabricksAuth(
+    method=AuthMethod.OBO,
+    token_provider=lambda: st.context.headers["X-Forwarded-Access-Token"],
+)
+db = SQLClient(settings=settings, auth=auth)
+ws = build_workspace_client(settings, auth)
+```
+
+### Wiring it up in Streamlit
+
+```python
+@st.cache_resource
+def get_workspace() -> WorkspaceClient:
+    settings = get_settings()
+    auth = build_auth(settings)
+    return build_workspace_client(settings, auth)
 ```
 
 ---
@@ -268,7 +345,7 @@ print(q.sql)    # "SELECT customerid, first_name …\n"
 
 The registry is lazy — a file is read from disk only on first access, then cached for the lifetime of the instance.
 
-### Passing a query to `DatabricksClient`
+### Passing a query to `SQLClient`
 
 ```python
 q = registry.get("customers/list_customers_by_state")

@@ -7,28 +7,28 @@ name = "databricks-app-utils"
 version = "0.2.2"
 description = "Utilities for building apps on Databricks: settings, authentication, SQL client, and query registry."
 readme = "README.md"
-license = {text = "GPL-3.0"}
+license = { text = "GPL-3.0" }
 license-files = ["LICEN[CS]E*"]
 authors = [
-  { name = "Christoph Stotzer", email = "christoph.stotzer@gmail.com" },
+    { name = "Christoph Stotzer", email = "christoph.stotzer@gmail.com" },
 ]
 keywords = ["databricks", "streamlit", "sql", "utilities"]
 classifiers = [
-  "Development Status :: 4 - Beta",
-  "Intended Audience :: Developers",
-  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.11",
-  "Topic :: Database",
-  "Topic :: Software Development :: Libraries :: Python Modules",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 requires-python = ">=3.11,<3.12"
 dependencies = [
-  "streamlit",
-  "pydantic>=2.6",
-  "pydantic-settings>=2.2",
-  "databricks-sql-connector>=3.0.0",
-  "pyarrow>=12.0.0",
+    "streamlit",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "databricks-sql-connector>=3.0.0",
+    "pyarrow>=12.0.0",
 ]
 
 [project.optional-dependencies]
@@ -53,18 +53,17 @@ dev = [
     "streamlit",
     "polars (>=1.38.1,<2.0.0)",
     "databricks-sdk (>=0.94.0,<0.95.0)",
+    "mypy>=1.19.1",
 ]
 
 [tool.ruff]
 line-length = 79
 
 [tool.ruff.lint]
-select = [
-    "ALL",
-]
+select = ["ALL"]
 extend-select = [
-    "D",  # docstyle
-    "I",  # isort
+    "D", # docstyle
+    "I", # isort
 ]
 preview = true
 ignore = [
@@ -101,7 +100,7 @@ convention = "google"
 "workspace_client.py" = [
     "PLC0415", # intentional lazy import for optional databricks-sdk dependency
 ]
-"databricks_client.py" = [
+"sql_client.py" = [
     "PLC0415", # intentional lazy imports for optional dependencies (polars, pandas)
     "C901",    # _arrow_type_to_spark complexity is inherent to the type mapping
     "PLR0911", # _arrow_type_to_spark return count is inherent to the type mapping
@@ -118,3 +117,6 @@ convention = "google"
     "PLR6301", # Don't care about unused self parameter in methods definitions.
     "ANN201",  # Don't require return type annotations in tests
 ]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]

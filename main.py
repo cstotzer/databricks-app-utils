@@ -1,10 +1,13 @@
 import streamlit as st
+from databricks.sdk import (
+    WorkspaceClient,  # noqa: PLC0415 — optional dependency used in workspace_client.py
+)
 
 from databricks_app_utils.auth import AuthMethod, DatabricksAuth, build_auth
-from databricks_app_utils.databricks_client import DatabricksClient
 from databricks_app_utils.query_registry import QueryRegistry
 from databricks_app_utils.settings import AppSettings
-from databricks_app_utils.workspace_client import WorkspaceClient
+from databricks_app_utils.sql_client import SQLClient
+from databricks_app_utils.workspace_client import build_workspace_client
 
 
 @st.cache_resource
@@ -19,31 +22,24 @@ def get_settings() -> AppSettings:
     return AppSettings()
 
 
-@st.cache_resource
-def get_queries() -> QueryRegistry:
-    """Get the query registry.
-
-    Returns:
-    --------
-    QueryRegistry
-        The query registry containing available queries.
-    """
-    return QueryRegistry(package="app.queries")
-
-
 def _obo_token_provider() -> str:
-    # Works only when deployed on Databricks Apps with OBO enabled.
+    # Works only when deployed on Databricks Apps with OBO enabled. Because the
+    # user token is only available at runtime from request headers, we inject a
+    # token provider function that fetches the token on demand from Streamlit's
+    # request context.
     headers = st.context.headers
     return headers["X-Forwarded-Access-Token"]
 
 
 @st.cache_resource
-def get_db() -> DatabricksClient:
+def get_sql_client() -> SQLClient:
     """Get the Databricks client.
+
+    We cache the client as a Streamlit resource to reuse across interactions.
 
     Returns:
     --------
-    DatabricksClient
+    SQLClient
         The Databricks client configured with appropriate authentication.
     """
     settings = get_settings()
@@ -55,7 +51,43 @@ def get_db() -> DatabricksClient:
             method=auth.method, token_provider=_obo_token_provider
         )
 
-    return DatabricksClient(settings=settings, auth=auth)
+    return SQLClient(settings=settings, auth=auth)
+
+
+@st.cache_resource()
+def get_workspace_client() -> WorkspaceClient:
+    """Get the Databricks Workspace client.
+
+    We cache the client as a Streamlit resource to reuse across interactions.
+
+    Note: This requires the optional ``databricks-sdk`` dependency. If you
+    haven't installed it yet, run:
+
+        pip install 'databricks-app-utils[sdk]'
+
+    The WorkspaceClient is only used in this skeleton for demonstration
+    purposes (to fetch workspace info and run a secrets API example). In a
+    production app, you might choose to use it more extensively for things like
+    dynamic job execution, workspace metadata introspection, or secrets
+    management. The authentication method is the same as for SQLClient, so if
+    you're using OBO, the WorkspaceClient will also have the same token
+    provider injected at runtime.
+
+    Returns:
+    --------
+    WorkspaceClient
+        The Databricks Workspace client configured with appropriate authentication.
+    """
+    settings = get_settings()
+    auth = build_auth(settings)
+
+    # Inject OBO token provider at runtime if configured
+    if auth.method == AuthMethod.OBO:
+        auth = DatabricksAuth(
+            method=auth.method, token_provider=_obo_token_provider
+        )
+
+    return build_workspace_client(settings, auth)
 
 
 def connection_self_test() -> None:
@@ -65,7 +97,7 @@ def connection_self_test() -> None:
     a test query that validates the connection to Databricks.
     """
     settings = get_settings()
-    db = get_db()
+    db = get_sql_client()
 
     st.subheader("Connection self-test")
     st.caption(f"Auth method: `{settings.databricks_auth_method}`")
@@ -98,11 +130,10 @@ st.divider()
 
 auth = build_auth(get_settings())
 
-wc = WorkspaceClient(settings=get_settings(), auth=auth)
+w = get_workspace_client()
+
 st.subheader("Databricks Workspace Info")
 try:
-    w = wc.client
-
     ll = w.catalogs.list()
 
     for c in ll:

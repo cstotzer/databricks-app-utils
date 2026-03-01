@@ -1,4 +1,4 @@
-"""Unit tests for DatabricksClient using mocked connections."""
+"""Unit tests for SQLClient using mocked connections."""
 
 from unittest.mock import MagicMock, patch
 
@@ -6,7 +6,7 @@ import pyarrow as pa
 import pytest
 
 from databricks_app_utils.auth import DatabricksAuth
-from databricks_app_utils.databricks_client import DatabricksClient
+from databricks_app_utils.sql_client import SQLClient
 from databricks_app_utils.settings import AppSettings, AuthMethod
 
 # ---------------------------------------------------------------------------
@@ -31,10 +31,10 @@ def _make_settings(**overrides):
     return AppSettings.model_construct(**defaults)
 
 
-def _make_client(**settings_overrides) -> DatabricksClient:
+def _make_client(**settings_overrides) -> SQLClient:
     settings = _make_settings(**settings_overrides)
     auth = DatabricksAuth(method=AuthMethod.PAT, access_token="fake-token")
-    return DatabricksClient(settings=settings, auth=auth)
+    return SQLClient(settings=settings, auth=auth)
 
 
 def _mock_cursor(arrow_table=None, rows=None, description=None):
@@ -68,7 +68,7 @@ def test_query_polars_returns_dataframe():
         arrow_table=pa.table({"n": pa.array([1], type=pa.int64())})
     )
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query_polars("SELECT 1 AS n")
@@ -82,7 +82,7 @@ def test_query_polars_with_named_params():
         arrow_table=pa.table({"v": pa.array([42], type=pa.int64())})
     )
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query_polars(
@@ -98,7 +98,7 @@ def test_query_polars_multiple_rows():
         arrow_table=pa.table({"n": pa.array([1, 2, 3, 4, 5], type=pa.int64())})
     )
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query_polars("SELECT n FROM t")
@@ -112,7 +112,7 @@ def test_query_polars_in_list():
         arrow_table=pa.table({"n": pa.array([2, 4], type=pa.int64())})
     )
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query_polars(
@@ -130,7 +130,7 @@ def test_query_polars_in_list_single_value():
         arrow_table=pa.table({"n": pa.array([3], type=pa.int64())})
     )
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         _make_client().query_polars(
@@ -147,7 +147,7 @@ def test_query_polars_in_list_mixed_params():
         arrow_table=pa.table({"n": pa.array([6, 8], type=pa.int64())})
     )
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query_polars(
@@ -171,7 +171,7 @@ def test_query_pandas_returns_dataframe():
         arrow_table=pa.table({"n": pa.array([1], type=pa.int64())})
     )
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query_pandas("SELECT 1 AS n")
@@ -185,7 +185,7 @@ def test_query_pandas_with_named_params():
         arrow_table=pa.table({"v": pa.array([99], type=pa.int64())})
     )
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query_pandas(
@@ -201,7 +201,7 @@ def test_query_pandas_multiple_rows():
         arrow_table=pa.table({"n": pa.array([10, 20, 30], type=pa.int64())})
     )
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query_pandas("SELECT n FROM t")
@@ -215,7 +215,7 @@ def test_query_pandas_in_list():
         arrow_table=pa.table({"n": pa.array([1, 5], type=pa.int64())})
     )
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query_pandas(
@@ -242,7 +242,7 @@ _DESC_V = [("v", None, None, None, None, None, None)]
 def test_query_returns_list_of_dicts():
     cursor = _mock_cursor(rows=[(1, "hello")], description=_DESC_A_B)
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query("SELECT 1 AS a, 'hello' AS b")
@@ -252,7 +252,7 @@ def test_query_returns_list_of_dicts():
 def test_query_multiple_rows():
     cursor = _mock_cursor(rows=[(1,), (2,), (3,)], description=_DESC_N)
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query("SELECT n FROM t")
@@ -262,7 +262,7 @@ def test_query_multiple_rows():
 def test_query_with_named_params():
     cursor = _mock_cursor(rows=[(99,)], description=_DESC_V)
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query("SELECT :val AS v", params={"val": 99})
@@ -273,7 +273,7 @@ def test_query_with_named_params():
 def test_query_with_in_list():
     cursor = _mock_cursor(rows=[(2,), (4,)], description=_DESC_N)
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query(
@@ -285,7 +285,7 @@ def test_query_with_in_list():
 def test_query_empty_result():
     cursor = _mock_cursor(rows=[], description=_DESC_N)
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         result = _make_client().query("SELECT n FROM t WHERE 1=0")
@@ -300,7 +300,7 @@ def test_query_empty_result():
 def test_use_catalog_applied():
     cursor = _mock_cursor(arrow_table=pa.table({"x": pa.array([1])}))
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         _make_client(databricks_default_catalog="my_catalog").query_polars(
@@ -313,7 +313,7 @@ def test_use_catalog_applied():
 def test_use_schema_applied():
     cursor = _mock_cursor(arrow_table=pa.table({"x": pa.array([1])}))
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         _make_client(databricks_default_schema="my_schema").query_polars(
@@ -326,7 +326,7 @@ def test_use_schema_applied():
 def test_no_use_statements_when_no_defaults():
     cursor = _mock_cursor(arrow_table=pa.table({"x": pa.array([1])}))
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         _make_client().query_polars("SELECT 1 AS x")
@@ -342,7 +342,7 @@ def test_no_use_statements_when_no_defaults():
 def test_query_tag_prepended():
     cursor = _mock_cursor(arrow_table=pa.table({"x": pa.array([1])}))
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         _make_client(query_tag="my-tag").query_polars("SELECT 1 AS x")
@@ -353,7 +353,7 @@ def test_query_tag_prepended():
 def test_no_query_tag_when_none():
     cursor = _mock_cursor(arrow_table=pa.table({"x": pa.array([1])}))
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         _make_client(query_tag=None).query_polars("SELECT 1 AS x")
@@ -380,7 +380,7 @@ def test_retries_on_transient_error():
         return good_conn
 
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         side_effect=connect_side_effect,
     ):
         with patch("time.sleep"):
@@ -397,7 +397,7 @@ def test_raises_after_max_retries():
         raise RuntimeError("always fails")
 
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         side_effect=always_fail,
     ):
         with patch("time.sleep"):
@@ -415,11 +415,11 @@ def test_raises_after_max_retries():
 def test_obo_raises_without_token_provider():
     settings = _make_settings(databricks_auth_method=AuthMethod.OBO)
     auth = DatabricksAuth(method=AuthMethod.OBO)
-    client = DatabricksClient(settings=settings, auth=auth)
+    client = SQLClient(settings=settings, auth=auth)
 
     cursor = _mock_cursor(arrow_table=pa.table({"x": pa.array([1])}))
     with patch(
-        "databricks_app_utils.databricks_client.sql.connect",
+        "databricks_app_utils.sql_client.sql.connect",
         return_value=_mock_conn(cursor),
     ):
         with pytest.raises(ValueError, match="token_provider"):

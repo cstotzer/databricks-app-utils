@@ -13,6 +13,7 @@ def test_loads_from_env():
 def test_auth_method_enum():
     assert AuthMethod.PAT == "pat"
     assert AuthMethod.U2M == "u2m"
+    assert AuthMethod.U2M_PERSISTENT == "u2m_persistent"
     assert AuthMethod.OBO == "obo"
 
 

@@ -12,15 +12,15 @@ Authentication is split across three files:
 |---|---|
 | `settings.py` | Reads configuration from environment / `.env` via Pydantic |
 | `auth.py` | Translates settings into a `DatabricksAuth` value object |
-| `databricks_client.py` | Consumes `DatabricksAuth` when opening each SQL connection |
+| `sql_client.py` | Consumes `DatabricksAuth` when opening each SQL connection |
 
-`build_auth(settings)` is called exactly **once** per server process, inside `get_db()` which is decorated with `@st.cache_resource`. The resulting `DatabricksClient` (and the `DatabricksAuth` embedded inside it) is therefore a **process-level singleton** — it survives page refreshes and is shared across all Streamlit user sessions on the same server process.
+`build_auth(settings)` is called exactly **once** per server process, inside `get_db()` which is decorated with `@st.cache_resource`. The resulting `SQLClient` (and the `DatabricksAuth` embedded inside it) is therefore a **process-level singleton** — it survives page refreshes and is shared across all Streamlit user sessions on the same server process.
 
 ```
 AppSettings  ──►  build_auth()  ──►  DatabricksAuth
                                            │
                                            ▼
-                               DatabricksClient  (cached by @st.cache_resource)
+                               SQLClient  (cached by @st.cache_resource)
                                            │
                                ┌───────────┘ one new sql.connect() per query
                                ▼
@@ -97,7 +97,7 @@ This is the recommended method for **local development**. It opens a browser-bas
 
 #### Step 1 — `build_auth()` creates an `OAuthPersistenceCache`
 
-`OAuthPersistenceCache` (from `databricks.sql.experimental.oauth_persistence`) is an in-memory dict that maps hostname → `OAuthToken(access_token, refresh_token)`. A single instance is created at startup and kept alive for the lifetime of the process inside the `@st.cache_resource`-cached `DatabricksClient`.
+`OAuthPersistenceCache` (from `databricks.sql.experimental.oauth_persistence`) is an in-memory dict that maps hostname → `OAuthToken(access_token, refresh_token)`. A single instance is created at startup and kept alive for the lifetime of the process inside the `@st.cache_resource`-cached `SQLClient`.
 
 ```python
 # auth.py
@@ -133,7 +133,7 @@ _initial_get_token()
 
 #### Step 4 — Token lifetime across connections
 
-Because the **same `OAuthPersistenceCache` instance** is shared by every `sql.connect()` call (via the cached `DatabricksClient`), the token written after the first browser login is available to all subsequent connections:
+Because the **same `OAuthPersistenceCache` instance** is shared by every `sql.connect()` call (via the cached `SQLClient`), the token written after the first browser login is available to all subsequent connections:
 
 ```
 Connection 1 (first query)
@@ -176,11 +176,54 @@ User (browser)          Streamlit server             Databricks
 - **Identity-aware access** — queries run under the developer's own Databricks identity, so Unity Catalog permissions, row-level security, and audit logs all reflect the actual user rather than a shared service-account token.
 - **Automatic token refresh** — the refresh token is held in `OAuthPersistenceCache` for the lifetime of the server process. The connector silently refreshes the access token when it expires; the developer never needs to re-authenticate unless the process restarts.
 
-#### Why not use the Databricks SDK `Config`?
+---
 
-The original implementation used `databricks.sdk.config.Config(host=…)` as the credential source. As of SDK v0.94, `Config.__init__` eagerly calls `init_auth()`, which tries to resolve credentials from the environment (env vars, `~/.databrickscfg`, managed identity, etc.) and raises `ValueError` if none are found. Because the SDK's default credential chain does not include interactive browser login, this fails immediately when no pre-configured credentials exist — before the app even renders.
+## Method 4 — U2M Persistent (SDK-backed, disk token cache)
 
-The connector-native approach avoids this entirely: no SDK `Config` is created at startup. The browser flow is triggered lazily by the connector only when the first actual SQL connection is opened.
+**Environment variable:** `DATABRICKS_AUTH_METHOD=u2m_persistent`  
+**Requires:** `pip install 'databricks-app-utils[sdk]'`
+
+This is the recommended method when you use both `SQLClient` (SQL) and `WorkspaceClient` (SDK) together, or when you want OAuth tokens to survive process restarts.
+
+### How it works
+
+`build_auth()` creates a `databricks.sdk.config.Config(auth_type="external-browser")`. Because `Config.__init__` calls `init_auth()` eagerly, the SDK immediately:
+
+1. Checks `TokenCache` on disk (`~/.config/databricks-sdk-py/oauth/<hash>.json`)
+2. If a valid token is found: loads and proactively refreshes it — **no browser**
+3. If no token is found: opens the browser OAuth flow and saves the result to disk
+
+```
+build_auth()
+  └─► Config(host=…, auth_type="external-browser")
+        ├─► TokenCache.load()  →  token found  →  Refreshable.token()  →  no browser
+        └─► TokenCache.load()  →  miss          →  browser opens
+                                                    TokenCache.save(credentials)
+
+SQLClient._build_conn_kwargs()
+  └─► credentials_provider=lambda: cfg.authenticate
+        └─► cfg.authenticate()  →  Refreshable.token().access_token  (per query)
+
+WorkspaceClient._build()
+  └─► SdkClient(host=…, auth_type="external-browser")
+        └─► new Config  →  TokenCache.load()  →  hit (same file)  →  no browser
+```
+
+The `SQLClient` and `WorkspaceClient` each create their own `Config` instance, but both resolve to the **same cache file** because the cache key is `sha256(host + client_id + scopes)` — identical for both when using the default `databricks-cli` client ID.
+
+### Token lifetime
+
+| Token | TTL | Notes |
+|---|---|---|
+| Access token | ~1 hour | Refreshed 40 s before expiry by `Refreshable` |
+| Refresh token | 30 days rolling | Resets on each successful refresh |
+
+### Trade-offs
+
+- Browser opens at most once across both clients (shared disk cache).
+- Survives process restarts; no re-login after server bounces.
+- Requires `databricks-sdk` (`[sdk]` extra).
+- Not suitable for deployed apps (use `obo`) or CI/CD (use `pat`).
 
 ---
 
@@ -190,5 +233,5 @@ The connector-native approach avoids this entirely: no SDK `Config` is created a
 |---|---|---|
 | `DATABRICKS_SERVER_HOSTNAME` | — | `adb-xxx.azuredatabricks.net` (no `https://`) |
 | `DATABRICKS_HTTP_PATH` | — | `/sql/1.0/warehouses/…` |
-| `DATABRICKS_AUTH_METHOD` | `obo` | `pat` \| `u2m` \| `obo` |
+| `DATABRICKS_AUTH_METHOD` | `obo` | `pat` \| `u2m` \| `u2m_persistent` \| `obo` |
 | `DATABRICKS_PAT` | `None` | Required when `auth_method=pat` |
